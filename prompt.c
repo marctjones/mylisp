@@ -1,25 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifdef _WIN32
-#include <string.h>
-
-static char buffer[2048];
-
-char* readline(char* prompt){
-    fputs(prompt, stdout);
-    fgets(buffer, 2048, stdin);
-    char* cpy = malloc(strlen(buffer)+1);
-    strcpy(cpy, buffer);
-    cpy[strlen(cpy)-1] = '\0';
-    return cpy;
-}
-
-void add_history(char* unused) {}
-#else
+## sudo apt-get install libedit-dev
+## cc -std=c99 -Wall prompt.c -ledit -o prompt
 #include <editline/readline.h>
 #include <editline/history.h>
-#endif
 
 int main (int argc, char** argv) {
 
@@ -33,7 +18,7 @@ int main (int argc, char** argv) {
 
     printf("No you're a %s", input);
 
-    free(input)
+    free(input);
   }
 
   return 0;
