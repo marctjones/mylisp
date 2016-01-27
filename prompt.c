@@ -8,8 +8,40 @@
 #include <editline/history.h>
 
 /* cc -std=c99 -Wall prompt.c -lm -ledit -o prompt */
+/* Parser Combinator: https://github.com/orangeduck/mpc  */
 #include "mpc/mpc.h"
 
+/* Declare Lisp Value Struct */
+typedef struct {
+  int type;
+  long num;
+  int err;
+} lval;
+
+/* Enumeration of possible Lisp Value Types */
+enum { LVAL_NUM, LVAL_ERR };
+enum { LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM };
+
+lval lval_num(long x) {
+  lval v;
+  v.type = LVAL_NUM;
+  v.num = x;
+  return v;
+}
+
+lval lval_err(int x) {
+ lval v;
+ v.type = LVAL_ERR;
+ v.err = x;
+ return v;
+}
+
+	   
+
+void lval_print(lval v);
+void lval_println(lval v);
+lval eval(mpc_ast_t* t);
+lval eval_op(lval x, char* op, lval y);
 
 int main (int argc, char** argv) {
   mpc_parser_t* Number   = mpc_new("number");
@@ -22,12 +54,11 @@ int main (int argc, char** argv) {
 	number   : /-?[0-9]+/ ;				   \
 	operator : '+' | '-' | '*' | '/' ;		   \
 	expr	 : <number> | '(' <operator> <expr>+ ')' ; \
-	lispy	 : /^/ <number> | <expr> |		   \
-		       <operator> <expr>+ /$/ ;		   \
+	lispy	 : /^/ <operator> <expr>+ /$/ ;		   \
     ",
     Number, Operator, Expr, Lispy);
 
-  puts("Lispy version 0.0.0.0.2");
+  puts("Lispy version 0.0.0.0.3");
   puts("Press Ctrl+c to Exit\n");
 
   while (1) {
@@ -37,7 +68,8 @@ int main (int argc, char** argv) {
 
     mpc_result_t r;
     if (mpc_parse("<stdin>", input, Lispy, &r)) {
-      mpc_ast_print(r.output);
+      lval result = eval(r.output);
+      lval_println(result);
       mpc_ast_delete(r.output);
     } else {
       mpc_err_print(r.error);
@@ -50,4 +82,67 @@ int main (int argc, char** argv) {
   mpc_cleanup(4, Number, Operator, Expr, Lispy);  
 
   return 0;
+}
+
+lval eval(mpc_ast_t* t){
+  if (strstr(t->tag, "number")) {
+		errno = 0;
+		long x = strtol(t->contents, NULL, 10);
+    return errno != ERANGE ? lval_num(x) : lval_err(LERR_BAD_NUM);
+  }
+
+  char* op = t->children[1]->contents;
+
+  lval x = eval(t->children[2]);
+
+  int i = 3;
+  while (strstr(t->children[i]->tag, "expr")) {
+    x = eval_op(x, op, eval(t->children[i]));
+    i++;
+  }
+
+  //If the operate is a negative and there is only one parameter negate it
+  if (strcmp(op, "-") == 0 && i == 3){
+    x = lval_num(0 - x.num);
+  }
+
+  return x;
+}
+
+lval eval_op(lval x, char* op, lval y) {
+	if (x.type == LVAL_ERR) {return x; }
+	if (y.type == LVAL_ERR) {return y; }
+
+  if (strcmp(op, "+") == 0) {return lval_num(x.num + y.num); }
+  if (strcmp(op, "-") == 0) {return lval_num(x.num - y.num); }
+  if (strcmp(op, "*") == 0) {return lval_num(x.num * y.num); }
+  if (strcmp(op, "/") == 0) {
+		return y.num == 0
+			? lval_err(LERR_DIV_ZERO)
+			: lval_num(x.num / y.num);
+}
+
+  return lval_err(LERR_BAD_OP);
+}
+
+void lval_print(lval v) {
+  switch (v.type) {
+    case LVAL_NUM: printf("%li", v.num); break;
+    case LVAL_ERR:
+			if (v.err == LERR_DIV_ZERO) {
+				printf("Error: Division By Zero!");
+			}
+			if (v.err == LERR_BAD_OP)		{
+				printf("Error: Invalid Operator!");
+			}
+			if (v.err == LERR_BAD_NUM)	{
+				printf("Error: Invalid Number!");
+			}
+		break;
+	}
+}
+
+void lval_println(lval v) {
+	lval_print(v);
+	putchar('\n');
 }
