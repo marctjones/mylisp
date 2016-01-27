@@ -17,7 +17,7 @@ int main (int argc, char** argv) {
 
     add_history(input);
 
-    printf("No you're a %s", input);
+    printf("No you're a %s\n", input);
 
     free(input);
   }
