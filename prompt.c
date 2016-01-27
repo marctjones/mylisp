@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-## sudo apt-get install libedit-dev
-## cc -std=c99 -Wall prompt.c -ledit -o prompt
+/* sudo apt-get install libedit-dev
+/ cc -std=c99 -Wall prompt.c -ledit -o prompt */
+
 #include <editline/readline.h>
 #include <editline/history.h>
 
