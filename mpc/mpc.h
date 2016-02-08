@@ -16,7 +16,6 @@
 #include <string.h>
 #include <math.h>
 #include <errno.h>
-#include <ctype.h>
 
 /*
 ** State Type
@@ -219,9 +218,6 @@ mpc_val_t *mpcf_int(mpc_val_t *x);
 mpc_val_t *mpcf_hex(mpc_val_t *x);
 mpc_val_t *mpcf_oct(mpc_val_t *x);
 mpc_val_t *mpcf_float(mpc_val_t *x);
-mpc_val_t *mpcf_strtriml(mpc_val_t *x);
-mpc_val_t *mpcf_strtrimr(mpc_val_t *x);
-mpc_val_t *mpcf_strtrim(mpc_val_t *x);
 
 mpc_val_t *mpcf_escape(mpc_val_t *x);
 mpc_val_t *mpcf_escape_regex(mpc_val_t *x);
@@ -314,13 +310,10 @@ mpc_err_t *mpca_lang_pipe(int flags, FILE *f, ...);
 mpc_err_t *mpca_lang_contents(int flags, const char *filename, ...);
 
 /*
-** Misc
+** Debug & Testing
 */
 
-
 void mpc_print(mpc_parser_t *p);
-void mpc_optimise(mpc_parser_t *p);
-void mpc_stats(mpc_parser_t *p);
 
 int mpc_test_pass(mpc_parser_t *p, const char *s, const void *d,
   int(*tester)(const void*, const void*), 

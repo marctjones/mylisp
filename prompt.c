@@ -1,15 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
-
-/* sudo apt-get install libedit-dev
-/ cc -std=c99 -Wall prompt.c -ledit -o prompt */
-
-#include <editline/readline.h>
-#include <editline/history.h>
-
 /* cc -std=c99 -Wall lprompt.c -lm -ledit -o prompt */
 /* Parser Combinator: https://github.com/orangeduck/mpc  */
 #include "mpc/mpc.h"
+
+/* sudo apt-get install libedit-dev
+/ cc -std=c99 -Wall prompt.c -ledit -o prompt */
+#include <editline/readline.h>
+#include <editline/history.h>
+
 
 #define LASSERT(args, cond, fmt, ...) \
   if (!(cond)) { \
@@ -69,22 +68,35 @@ struct lenv {
   lval** vals;
 };
 
+mpc_parser_t* Comment;
+mpc_parser_t* Number;
+mpc_parser_t* String;
+mpc_parser_t* Symbol;
+mpc_parser_t* Sexpr;
+mpc_parser_t* Qexpr;
+mpc_parser_t* Expr;
+mpc_parser_t* Lispy;
+
 lval*	builtin(lenv* e, lval* a, char* func);
 lval*	builtin_add(lenv* e, lval* a);
 lval*	builtin_cons(lenv* e, lval* a);
 lval*   builtin_def(lenv* e, lval* a);
 lval*	builtin_div(lenv* e, lval* a);
 lval*   builtin_eq(lenv*, lval* a);
+lval*   builtin_error(lenv* e, lval* a);
 lval*   builtin_eval(lenv* e, lval* a);
 lval*   builtin_gt(lenv* e, lval* a);
 lval*	builtin_head(lenv* e, lval* a);
 lval*   builtin_join(lenv* e, lval* a);
 lval*   builtin_len(lenv* e, lval* a);
 lval*   builtin_list(lenv* e, lval* a);
+lval*   builtin_load(lenv* e, lval* a);
 lval*   builtin_lt(lenv* e, lval* a);
 lval*	builtin_mul(lenv* e, lval* a);
+lval*   builtin_ne(lenv* e, lval* a);
 lval*	builtin_op(lenv* e, lval* a, char* op);
 lval*   builtin_ord(lenv* e, lval* a, char* op);
+lval*   builtin_print(lenv* e, lval* a);
 lval*	builtin_sub(lenv* e, lval* a);
 lval*	builtin_tail(lenv* e, lval* a);
 lval*   builtin_var(lenv* e, lval* a, char* func);
@@ -96,7 +108,6 @@ void	lenv_add_builtin(lenv* e, char* name, lbuiltin func);
 void 	lenv_add_builtins(lenv* e);
 void    lenv_def(lenv* e, lval* k, lval* v);
 void 	lenv_del(lenv* e);
-int     lval_eq(lval* x, lval* y);
 lval*	lenv_get(lenv* e, lval* k);
 lenv*   lenv_new(void);
 void 	lenv_put(lenv* e, lval* k, lval* v);
@@ -107,9 +118,10 @@ lval*	lval_add(lval* v, lval* x);
 lval*	lval_copy(lval* v);
 void 	lval_del(lval* v);
 lval*	lval_err(char* fmt, ...);
-void 	lval_expr_print(lval* v, char open, char close);
+int     lval_eq(lval* x, lval* y);
 lval*	lval_eval(lenv* e, lval* v);
 lval*	lval_eval_sexpr(lenv* e, lval* v);
+void 	lval_expr_print(lval* v, char open, char close);
 lval*	lval_fun(lbuiltin fun);
 lval*   lval_join(lval* x, lval* y);
 lval*   lval_lambda(lval* formals, lval* body);
@@ -130,14 +142,14 @@ lval*	lval_qexpr(void);
 int 	main (int argc, char** argv);
 
 int main (int argc, char** argv) {
-  mpc_parser_t* Comment  = mpc_new("comment");
-  mpc_parser_t* Number   = mpc_new("number");
-  mpc_parser_t* String   = mpc_new("string");
-  mpc_parser_t* Symbol	 = mpc_new("symbol");
-  mpc_parser_t* Sexpr	 = mpc_new("sexpr");
-  mpc_parser_t* Qexpr	 = mpc_new("qexpr");
-  mpc_parser_t* Expr     = mpc_new("expr");
-  mpc_parser_t* Lispy    = mpc_new("lispy");
+  Comment  = mpc_new("comment");
+  Number   = mpc_new("number");
+  String   = mpc_new("string");
+  Symbol   = mpc_new("symbol");
+  Sexpr	   = mpc_new("sexpr");
+  Qexpr	   = mpc_new("qexpr");
+  Expr     = mpc_new("expr");
+  Lispy    = mpc_new("lispy");
 
   mpca_lang(MPCA_LANG_DEFAULT,
     "	                                                       \
@@ -156,45 +168,43 @@ int main (int argc, char** argv) {
   lenv* e = lenv_new();
   lenv_add_builtins(e);
 
-  puts("Lispy version 0.0.0.0.3");
-  puts("Press Ctrl+c to Exit\n");
 
-  while (1) {
-    char* input = readline("lispy> ");
+  if (argc == 1) {
+    puts("Lispy version 0.0.0.0.14");
+    puts("Press Ctrl+c to Exit\n");
 
-    add_history(input);
+    while (1) {
+      char* input = readline("lispy> ");
+      add_history(input);
 
-    mpc_result_t r;
-    if (mpc_parse("<stdin>", input, Lispy, &r)) {
-      lval* x = lval_eval(e, lval_read(r.output));                  
-      lval_println(x);
-      lval_del(x);
-    } else {
-      mpc_err_print(r.error);
-      mpc_err_delete(r.error);
+      mpc_result_t r;
+      if (mpc_parse("<stdin>", input, Lispy, &r)) {
+        lval* x = lval_eval(e, lval_read(r.output));                  
+        lval_println(x);
+        lval_del(x);
+      } else {
+        mpc_err_print(r.error);
+        mpc_err_delete(r.error);
+      }
+
+      free(input);
     }
-
-    free(input);
   }
+
+  if (argc >= 2) {
+    for (int i = 1; i < argc; i++) {
+      lval* args = lval_add(lval_sexpr(), lval_str(argv[i]));
+      lval* x = builtin_load(e, args);
+      if (x->type == LVAL_ERR) { lval_println(x); }
+      lval_del(x);
+    }
+  }
+
 
   lenv_del(e);
   mpc_cleanup(8, Number, Symbol, String, Comment, Sexpr, Qexpr, Expr, Lispy);  
 
   return 0;
-}
-
-lval* builtin(lenv* e, lval* a, char* func) {
-  if (strstr("+-/*<>", func)) { return builtin_op(e, a, func);}
-  if (strcmp("cons", func) == 0) { return builtin_cons(e, a); }
-  if (strcmp("eq",   func) == 0) { return builtin_eq(e, a);   }
-  if (strcmp("eval", func) == 0) { return builtin_eval(e, a); }
-  if (strcmp("head", func) == 0) { return builtin_head(e, a); }
-  if (strcmp("join", func) == 0) { return builtin_join(e, a); }
-  if (strcmp("len",  func) == 0) { return builtin_len(e, a);  }
-  if (strcmp("list", func) == 0) { return builtin_list(e, a); }
-  if (strcmp("tail", func) == 0) { return builtin_tail(e, a); }
-  lval_del(a);
-  return lval_err("Unknown Function!");
 }
 
 lval* builtin_add(lenv* e, lval* a) {
@@ -239,6 +249,54 @@ lval* builtin_ge(lenv* e, lval* a) {
   return builtin_ord(e, a, ">=");
 }
 
+
+lval* builtin_print(lenv* e, lval* a) {
+  for (int i = 0; i < a->count; i++) {
+    lval_print(a->cell[i]); putchar(' ');
+  }
+  putchar('\n');
+  lval_del(a);
+  return lval_sexpr();
+}
+
+lval* builtin_error(lenv* e, lval* a) {
+  LASSERT_NUM("error", a, 1);
+  LASSERT_TYPE("error", a, 0, LVAL_STR);
+
+  lval* err = lval_err(a->cell[0]->str);
+  lval_del(a);
+  return err;
+}
+
+lval* builtin_load(lenv* e, lval* a) {
+  LASSERT_NUM("load", a, 1);
+  LASSERT_TYPE("load", a, 0, LVAL_STR);
+  mpc_result_t r;
+
+  if (mpc_parse_contents(a->cell[0]->str, Lispy, &r)) {
+    lval* expr = lval_read(r.output);
+    mpc_ast_delete(r.output);
+
+    while (expr->count){
+      lval* x = lval_eval(e, lval_pop(expr, 0));
+      if (x->type == LVAL_ERR) { lval_println(x); }
+      lval_del(x);
+    }
+
+    lval_del(expr);
+    lval_del(a);
+    return lval_sexpr();
+  } else {
+    char* err_msg = mpc_err_string(r.error);
+    mpc_err_delete(r.error);
+
+    lval* err = lval_err("Could not load Library %s", err_msg);
+    free(err_msg);
+    lval_del(a);
+ 
+    return err;
+  }
+}
 lval* builtin_lt(lenv* e, lval* a) {
   return builtin_ord(e, a, "<");
 }
@@ -473,26 +531,32 @@ void lenv_add_builtin(lenv* e, char* name, lbuiltin func){
 }
 
 void lenv_add_builtins(lenv* e) {
-  lenv_add_builtin(e, "+",    builtin_add);
   lenv_add_builtin(e, "def",  builtin_def);
-  lenv_add_builtin(e, "/",    builtin_div);
-  lenv_add_builtin(e, "cons", builtin_cons);
-  lenv_add_builtin(e, ">",    builtin_gt);
-  lenv_add_builtin(e, ">=",   builtin_ge);
-  lenv_add_builtin(e, "<",    builtin_lt);
-  lenv_add_builtin(e, "<=",   builtin_le);
-  lenv_add_builtin(e, "==",   builtin_eq);
-  lenv_add_builtin(e, "!=",   builtin_ne);
-  lenv_add_builtin(e, "eval", builtin_eval);
-  lenv_add_builtin(e, "head", builtin_head);
-  lenv_add_builtin(e, "join", builtin_join);
   lenv_add_builtin(e, "\\",   builtin_lambda);
+  lenv_add_builtin(e, "=",    builtin_put);
+
   lenv_add_builtin(e, "list", builtin_list);
+  lenv_add_builtin(e, "head", builtin_head);
+  lenv_add_builtin(e, "tail", builtin_tail);
+  lenv_add_builtin(e, "eval", builtin_eval);
+  lenv_add_builtin(e, "join", builtin_join);
+
+  lenv_add_builtin(e, "+",    builtin_add);
+  lenv_add_builtin(e, "/",    builtin_div);
   lenv_add_builtin(e, "*",    builtin_mul);
   lenv_add_builtin(e, "-",    builtin_sub);
-  lenv_add_builtin(e, "=",    builtin_put);
-  lenv_add_builtin(e, "tail", builtin_tail);
+
   lenv_add_builtin(e, "if",   builtin_if);
+  lenv_add_builtin(e, "==",   builtin_eq);
+  lenv_add_builtin(e, "!=",   builtin_ne);
+  lenv_add_builtin(e, ">",    builtin_gt);
+  lenv_add_builtin(e, "<",    builtin_lt);
+  lenv_add_builtin(e, ">=",   builtin_ge);
+  lenv_add_builtin(e, "<=",   builtin_le);
+
+  lenv_add_builtin(e, "load", builtin_load);
+  lenv_add_builtin(e, "error", builtin_error);
+  lenv_add_builtin(e, "print", builtin_print);
 }
 
 lenv* lenv_copy(lenv* e) {
@@ -923,7 +987,7 @@ lval* lval_read_str(mpc_ast_t* t) {
   strcpy(unescaped, t->contents+1);
   unescaped = mpcf_unescape(unescaped);
   lval* str = lval_str(unescaped);
-  free (unescaped);
+  free(unescaped);
   return str;
 }
 
